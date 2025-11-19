@@ -1,6 +1,8 @@
 #include <Arduino.h>
 #include "driver/rtc_io.h"
 #include <vector>
+#include <WiFi.h>
+#include <time.h>
 
 #define WAKEUP_GPIO_1 GPIO_NUM_4                                                                                                 // Only RTC IO are allowed - ESP32 Pin example
 #define WAKEUP_GPIO_2 GPIO_NUM_33                                                                                                // Only RTC IO are allowed - ESP32 Pin example
@@ -22,14 +24,70 @@ int lastSleep = 0;
 int sleepTime = 60;
 
 int debouncedelay = 50;
+//  WIFI 
+const char* WIFI_SSID = "IoT_H3/4";
+const char* WIFI_PASS = "98806829";
 
 // put function declarations here:
+
+// FORBIND TIL WIFI
+void connectWiFi()
+{
+  if (WiFi.isConnected()) return;
+
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(WIFI_SSID, WIFI_PASS);
+
+  Serial.print("Forbinder til WiFi");
+
+  int tries = 0;
+  while (!WiFi.isConnected() && tries < 40) {  // ca. 20 sek
+    Serial.print(".");
+    delay(500);
+    tries++;
+  }
+  Serial.println();
+
+  if (WiFi.isConnected()) Serial.println("WiFi: FORBUNDET");
+  else Serial.println("WiFi: FORBUNDELSE FEJLEDE");
+}
+
+// HENT TID VIA NTP 
+bool initTime()
+{
+  connectWiFi();
+
+  if (!WiFi.isConnected()) {
+    Serial.println("Ingen WiFi → kan ikke hente NTP-tid");
+    return false;
+  }
+
+  // 3600 = GMT+1 (DK vintertid), 0 = ingen ekstra sommertid-justering
+  configTime(3600, 0, "pool.ntp.org", "time.nist.gov");
+
+  struct tm timeinfo;
+  for (int i = 0; i < 20; i++) {
+    if (getLocalTime(&timeinfo)) {
+      Serial.println("Tid hentet fra NTP");
+      return true;
+    }
+    Serial.println("Venter på NTP...");
+    delay(500);
+  }
+
+  Serial.println("Kunne ikke hente tid fra NTP");
+  return false;
+}
 
 void setup()
 {
   // put your setup code here, to run once:
   Serial.begin(115200);
   delay(1000);
+
+  // wifi og tid
+  connectWiFi();
+  initTime();
 
   pinMode(happyButton, INPUT);
   pinMode(happyLed, OUTPUT);
