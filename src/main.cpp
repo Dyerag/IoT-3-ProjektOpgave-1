@@ -24,71 +24,26 @@ int lastSleep = 0;
 int sleepTime = 60;
 
 int debouncedelay = 50;
+
 //  WIFI 
 const char* WIFI_SSID = "IoT_H3/4";
 const char* WIFI_PASS = "98806829";
 
 // put function declarations here:
-
-// FORBIND TIL WIFI
-void connectWiFi()
-{
-  if (WiFi.isConnected()) return;
-
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASS);
-
-  Serial.print("Forbinder til WiFi");
-
-  int tries = 0;
-  while (!WiFi.isConnected() && tries < 40) {  // ca. 20 sek
-    Serial.print(".");
-    delay(500);
-    tries++;
-  }
-  Serial.println();
-
-  if (WiFi.isConnected()) Serial.println("WiFi: FORBUNDET");
-  else Serial.println("WiFi: FORBUNDELSE FEJLEDE");
-}
-
+void connectWiFi();
+bool InitTime();
 // HENT TID VIA NTP 
-bool initTime()
-{
-  connectWiFi();
-
-  if (!WiFi.isConnected()) {
-    Serial.println("Ingen WiFi → kan ikke hente NTP-tid");
-    return false;
-  }
-
-  // 3600 = GMT+1 (DK vintertid), 0 = ingen ekstra sommertid-justering
-  configTime(3600, 0, "pool.ntp.org", "time.nist.gov");
-
-  struct tm timeinfo;
-  for (int i = 0; i < 20; i++) {
-    if (getLocalTime(&timeinfo)) {
-      Serial.println("Tid hentet fra NTP");
-      return true;
-    }
-    Serial.println("Venter på NTP...");
-    delay(500);
-  }
-
-  Serial.println("Kunne ikke hente tid fra NTP");
-  return false;
-}
 
 void setup()
 {
   // put your setup code here, to run once:
   Serial.begin(115200);
   delay(1000);
-
+  
   // wifi og tid
   connectWiFi();
   initTime();
-
+  
   pinMode(happyButton, INPUT);
   pinMode(happyLed, OUTPUT);
   pinMode(satisfiedButton, INPUT);
@@ -97,15 +52,14 @@ void setup()
   pinMode(unsatisfiedLed, OUTPUT);
   pinMode(angryButton, INPUT);
   pinMode(angryLed, OUTPUT);
-
+  
   digitalWrite(happyLed, HIGH);
   digitalWrite(satisfiedLed, HIGH);
   digitalWrite(unsatisfiedLed, HIGH);
   digitalWrite(angryLed, HIGH);
-  delay(2000);
   
   esp_sleep_enable_ext1_wakeup(BUTTON_PIN_BITMASK, ESP_EXT1_WAKEUP_ANY_HIGH);
-
+  
   rtc_gpio_pulldown_en(WAKEUP_GPIO_1);
   rtc_gpio_pulldown_en(WAKEUP_GPIO_2);
   rtc_gpio_pulldown_en(WAKEUP_GPIO_3);
@@ -114,7 +68,7 @@ void setup()
   rtc_gpio_pullup_dis(WAKEUP_GPIO_2);
   rtc_gpio_pullup_dis(WAKEUP_GPIO_3);
   rtc_gpio_pullup_dis(WAKEUP_GPIO_4);
-
+  
   Serial.println("Entering sleep");
   esp_deep_sleep_start();
 }
@@ -125,3 +79,48 @@ void loop()
 }
 
 // put function definitions here:
+// FORBIND TIL WIFI
+void connectWiFi()
+{
+  if (WiFi.isConnected()) return;
+  
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(WIFI_SSID, WIFI_PASS);
+  
+  Serial.print("Forbinder til WiFi");
+  
+  int tries = 0;
+  while (!WiFi.isConnected() && tries < 40) {  // ca. 20 sek
+    Serial.print(".");
+    delay(500);
+    tries++;
+  }
+  Serial.println();
+  
+  if (WiFi.isConnected()) Serial.println("WiFi: FORBUNDET");
+  else Serial.println("WiFi: FORBUNDELSE FEJLEDE");
+}
+
+  bool initTime()
+  {
+    if (!WiFi.isConnected()) {
+      Serial.println("Ingen WiFi → kan ikke hente NTP-tid");
+      return false;
+    }
+    
+    // 3600 = GMT+1 (DK vintertid), 0 = ingen ekstra sommertid-justering
+    configTime(3600, 0, "pool.ntp.org", "time.nist.gov");
+  
+    struct tm timeinfo;
+    for (int i = 0; i < 20; i++) {
+      if (getLocalTime(&timeinfo)) {
+        Serial.println("Tid hentet fra NTP");
+        return true;
+      }
+      Serial.println("Venter på NTP...");
+      delay(500);
+    }
+  
+    Serial.println("Kunne ikke hente tid fra NTP");
+    return false;
+  }
