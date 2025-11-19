@@ -25,6 +25,31 @@ const char* WIFI_PASS = "98806829";
 
 // put function declarations here:
 
+// Knap/LED-arrays
+int buttons[] = { happyButton, satisfiedButton, unsatisfiedButton, angryButton };
+int leds[]    = { happyLed,    satisfiedLed,    unsatisfiedLed,    angryLed };
+const int count = 4;
+
+// Navn til print
+const char* buttonNames[] = {
+  "HAPPY",
+  "SATISFIED",
+  "UNSATISFIED",
+  "ANGRY"
+};
+
+
+// Debounce
+const unsigned long DEBOUNCE_MS = 30; 
+bool buttonStableState[4];            
+bool buttonLastReading[4];            
+unsigned long lastDebounceTime[4] = {0,0,0,0};
+
+// LED-timer (4 sek.)
+unsigned long ledTimer[4] = {0,0,0,0};
+const unsigned long LED_ON_TIME = 1000; // sekunder
+
+
 // FORBIND TIL WIFI
 void connectWiFi()
 {
@@ -74,6 +99,27 @@ bool initTime()
   return false;
 }
 
+// Print nuværende tid når en bestemt knap (index) er trykket
+void printCurrentTimeForButton(int index)
+{
+  struct tm timeinfo;
+  if (getLocalTime(&timeinfo)) {
+    Serial.printf(
+      "trykket: %s  %04d-%02d-%02d %02d:%02d:%02d\n",
+      buttonNames[index],               
+      timeinfo.tm_year + 1900,
+      timeinfo.tm_mon + 1,
+      timeinfo.tm_mday,
+      timeinfo.tm_hour,
+      timeinfo.tm_min,
+      timeinfo.tm_sec
+    );
+  } else {
+    Serial.println("Kunne ikke hente lokal tid");
+  }
+}
+
+
 void setup()
 {
   // put your setup code here, to run once:
@@ -93,11 +139,17 @@ void setup()
   pinMode(angryButton, INPUT);
   pinMode(angryLed, OUTPUT);
 
-  digitalWrite(happyLed, HIGH);
-  digitalWrite(satisfiedLed, HIGH);
-  digitalWrite(unsatisfiedLed, HIGH);
-  digitalWrite(angryLed, HIGH);
-  delay(2000);
+  // led slukket
+  for (int i = 0; i < count; i++) {
+    digitalWrite(leds[i], LOW);
+  }
+
+  // Init debounce-tilstand til nuværende knapniveau
+  for (int i = 0; i < count; i++) {
+    bool reading = digitalRead(buttons[i]);
+    buttonStableState[i] = reading;
+    buttonLastReading[i] = reading;
+  }
   
   esp_sleep_enable_ext1_wakeup(BUTTON_PIN_BITMASK, ESP_EXT1_WAKEUP_ANY_HIGH);
 
@@ -111,12 +163,49 @@ void setup()
   rtc_gpio_pullup_dis(WAKEUP_GPIO_4);
 
   Serial.println("Entering sleep");
-  esp_deep_sleep_start();
+  //esp_deep_sleep_start();
 }
+
+
 
 void loop()
 {
-  // put your main code here, to run repeatedly:
+  unsigned long now = millis();
+
+  for (int i = 0; i < count; i++) {
+
+    bool reading = digitalRead(buttons[i]);
+
+    // 1) Rå læsning ændret -> start debounce-timer
+    if (reading != buttonLastReading[i]) {
+      lastDebounceTime[i] = now;
+      buttonLastReading[i] = reading;
+    }
+
+    // 2) Hvis uændret i DEBOUNCE_MS -> opdatér stabil tilstand
+    if ((now - lastDebounceTime[i]) >= DEBOUNCE_MS) {
+      // er der en reel ændring i stabil tilstand
+      if (reading != buttonStableState[i]) {
+        // stabil tilstand skifter
+        buttonStableState[i] = reading;
+
+        // 3) Registrér et "tryk" ved LOW -> HIGH 
+        if (buttonStableState[i] == HIGH) {
+          // Tænd LED og start timer
+          digitalWrite(leds[i], HIGH);
+          ledTimer[i] = now;
+
+          // Print tid 
+          printCurrentTimeForButton(i);
+        }
+      }
+    }
+
+    // 4) Sluk LED efter LED_ON_TIME ms
+    if (digitalRead(leds[i]) == HIGH && (now - ledTimer[i] >= LED_ON_TIME)) {
+      digitalWrite(leds[i], LOW);
+    }
+  }
 }
 
 // put function definitions here:
