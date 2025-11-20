@@ -51,6 +51,11 @@ unsigned long lastDebounceTime[4] = {0, 0, 0, 0};
 unsigned long ledTimer[4] = {0, 0, 0, 0};
 const unsigned long LED_ON_TIME = 1000; // sekunder
 
+// Hukommelse til sidste knaptryk 
+int    lastPressedIndex      = -1; 
+String lastPressedName       = "";
+String lastPressedTimestamp  = "";
+
 // put function declarations here:
 void ConnectWiFi();
 bool InitTime();
@@ -132,8 +137,16 @@ void loop()
           digitalWrite(leds[i], HIGH);
           ledTimer[i] = now;
 
-          // Print tid
-          PrintCurrentTimeForButton(i);
+          // Hent tid og gem knaptryk
+          struct tm timeinfo;
+          if (getLocalTime(&timeinfo))
+          {
+            RememberButtonPress(i, timeinfo);
+          }
+          else
+          {
+            Serial.println("Kunne ikke hente lokal tid");
+          }
 
           // reset inactivity timer on button press
           lastAction = now;
@@ -214,25 +227,28 @@ void ConnectWiFi()
     Serial.println("WiFi: FORBUNDELSE FEJLEDE");
 }
 
-// HENT TID VIA NTP
-// Print nuværende tid når en bestemt knap (index) er trykket
-void PrintCurrentTimeForButton(int index)
+// GEM HUSK OM KNAPTRYK
+void RememberButtonPress(int index, const struct tm &timeinfo)
 {
-  struct tm timeinfo;
-  if (getLocalTime(&timeinfo))
-  {
-    Serial.printf(
-        "trykket: %s  %04d-%02d-%02d %02d:%02d:%02d\n",
-        buttonNames[index],
-        timeinfo.tm_year + 1900,
-        timeinfo.tm_mon + 1,
-        timeinfo.tm_mday,
-        timeinfo.tm_hour,
-        timeinfo.tm_min,
-        timeinfo.tm_sec);
-  }
-  else
-  {
-    Serial.println("Kunne ikke hente lokal tid");
-  }
+  lastPressedIndex = index;
+  lastPressedName  = buttonNames[index];
+
+  char buf[32];
+  snprintf(
+      buf,
+      sizeof(buf),
+      "%04d-%02d-%02d %02d:%02d:%02d",
+      timeinfo.tm_year + 1900,
+      timeinfo.tm_mon + 1,
+      timeinfo.tm_mday,
+      timeinfo.tm_hour,
+      timeinfo.tm_min,
+      timeinfo.tm_sec);
+
+  lastPressedTimestamp = String(buf);
+
+  Serial.print("gemt: ");
+  Serial.print(lastPressedName);
+  Serial.print("  tid: ");
+  Serial.println(lastPressedTimestamp);
 }
