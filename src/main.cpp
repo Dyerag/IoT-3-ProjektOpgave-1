@@ -2,13 +2,16 @@
 #include "driver/rtc_io.h"
 #include <WiFi.h>
 #include <time.h>
+#include <PubSubClient.h>
 
 // Wakeup buttons
 #define WAKEUP_GPIO_1 GPIO_NUM_4                                                                                                 // Only RTC IO are allowed - ESP32 Pin example
 #define WAKEUP_GPIO_2 GPIO_NUM_33                                                                                                // Only RTC IO are allowed - ESP32 Pin example
 #define WAKEUP_GPIO_3 GPIO_NUM_35                                                                                                // Only RTC IO are allowed - ESP32 Pin example
 #define WAKEUP_GPIO_4 GPIO_NUM_34                                                                                                // Only RTC IO are allowed - ESP32 Pin example
+// Adds all the buttons to the bitmask, so they can be used to wake up the ESP32
 #define BUTTON_PIN_BITMASK (1ULL << WAKEUP_GPIO_1) | (1ULL << WAKEUP_GPIO_2) | (1ULL << WAKEUP_GPIO_3) | (1ULL << WAKEUP_GPIO_4) // 2 ^ GPIO_NUMBER in hex
+// Sets the wakeup method to 0, which means use EXT1 for wakeup. 1 supports one or more pins
 #define USE_EXT0_WAKEUP 0                                                                                                        // 1 = EXT0 wakeup, 0 = EXT1 wakeup
 
 // Button and LED pins
@@ -23,7 +26,8 @@ const int angryLed = 25;
 
 // Deepsleep time
 unsigned long lastAction = 0;
-unsigned long sleepTime = 30000; // 30 seconds
+// unsigned long sleepTime = 30000; // 30 seconds
+unsigned long sleepTime = 100;
 
 //  WIFI
 const char *WIFI_SSID = "TEC-IOT";
@@ -60,6 +64,34 @@ String lastPressedTimestamp  = "";
 void ConnectWiFi();
 bool InitTime();
 void PrintCurrentTimeForButton(int index);
+void WakeupCause();
+
+// GEM HUSK OM KNAPTRYK
+void RememberButtonPress(int index, const struct tm &timeinfo)
+{
+  lastPressedIndex = index;
+  lastPressedName  = buttonNames[index];
+
+  char buf[32];
+  snprintf(
+      buf,
+      sizeof(buf),
+      "%04d-%02d-%02d %02d:%02d:%02d",
+      timeinfo.tm_year + 1900,
+      timeinfo.tm_mon + 1,
+      timeinfo.tm_mday,
+      timeinfo.tm_hour,
+      timeinfo.tm_min,
+      timeinfo.tm_sec);
+
+  lastPressedTimestamp = String(buf);
+
+  Serial.print("gemt: ");
+  Serial.print(lastPressedName);
+  Serial.print("  tid: ");
+  Serial.println(lastPressedTimestamp);
+}
+
 
 void setup()
 {
@@ -71,6 +103,7 @@ void setup()
   ConnectWiFi();
   InitTime();
 
+  // pinMode setup for the buttons and corresponding leds
   pinMode(happyButton, INPUT);
   pinMode(happyLed, OUTPUT);
   pinMode(satisfiedButton, INPUT);
@@ -95,7 +128,6 @@ void setup()
   }
 
   esp_sleep_enable_ext1_wakeup(BUTTON_PIN_BITMASK, ESP_EXT1_WAKEUP_ANY_HIGH);
-
   rtc_gpio_pulldown_en(WAKEUP_GPIO_1);
   rtc_gpio_pulldown_en(WAKEUP_GPIO_2);
   rtc_gpio_pulldown_en(WAKEUP_GPIO_3);
@@ -104,6 +136,8 @@ void setup()
   rtc_gpio_pullup_dis(WAKEUP_GPIO_2);
   rtc_gpio_pullup_dis(WAKEUP_GPIO_3);
   rtc_gpio_pullup_dis(WAKEUP_GPIO_4);
+
+  WakeupCause();
 }
 
 void loop()
@@ -227,28 +261,30 @@ void ConnectWiFi()
     Serial.println("WiFi: FORBUNDELSE FEJLEDE");
 }
 
-// GEM HUSK OM KNAPTRYK
-void RememberButtonPress(int index, const struct tm &timeinfo)
-{
-  lastPressedIndex = index;
-  lastPressedName  = buttonNames[index];
+ void WakeupCause(){
+  // wakeup_reason = esp_sleep_get_wakeup_cause();
 
-  char buf[32];
-  snprintf(
-      buf,
-      sizeof(buf),
-      "%04d-%02d-%02d %02d:%02d:%02d",
-      timeinfo.tm_year + 1900,
-      timeinfo.tm_mon + 1,
-      timeinfo.tm_mday,
-      timeinfo.tm_hour,
-      timeinfo.tm_min,
-      timeinfo.tm_sec);
+  // switch (wakeup_reason)
+  // {
+  // case ESP_SLEEP_WAKEUP_EXT0:
+  //   Serial.println("Wakeup caused by external signal using RTC_IO");
+  //   break;
+  // case ESP_SLEEP_WAKEUP_EXT1:
+  //   Serial.println("Wakeup caused by external signal using RTC_CNTL");
+  //   break;
+  // case ESP_SLEEP_WAKEUP_TIMER:
+  //   Serial.println("Wakeup caused by timer");
+  //   break;
+  // case ESP_SLEEP_WAKEUP_TOUCHPAD:
+  //   Serial.println("Wakeup caused by touchpad");
+  //   break;
+  // case ESP_SLEEP_WAKEUP_ULP:
+  //   Serial.println("Wakeup caused by ULP program");
+  //   break;
+  // default:
+  //   Serial.printf("Wakeup was not caused by deep sleep: %d\n", wakeup_reason);
+  //   break;
+  // }
 
-  lastPressedTimestamp = String(buf);
-
-  Serial.print("gemt: ");
-  Serial.print(lastPressedName);
-  Serial.print("  tid: ");
-  Serial.println(lastPressedTimestamp);
-}
+  Serial.println("Woke up from sleep by " + String(esp_sleep_get_wakeup_cause()));
+ }
