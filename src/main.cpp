@@ -26,8 +26,8 @@ const int angryLed = 25;
 
 // Deepsleep time
 unsigned long lastAction = 0;
-// unsigned long sleepTime = 30000; // 30 seconds
-unsigned long sleepTime = 100;
+unsigned long sleepTime = 30000; // 30 seconds
+//unsigned long sleepTime = 100;
 
 //  WIFI
 const char *WIFI_SSID = "TEC-IOT";
@@ -72,6 +72,8 @@ void PrintCurrentTimeForButton(int index);
 void WakeUpButtonTrigger();
 void RememberButtonPress(int index, const struct tm &timeinfo);
 void HandleButtons();
+void OnButtonClick(int index);
+
 
 void setup()
 {
@@ -218,7 +220,7 @@ void WakeUpButtonTrigger()
   case GPIO_NUM_33:
   case GPIO_NUM_35:
   case GPIO_NUM_34:
-    HandleButtons(wakeup_reason);
+    //HandleButtons(wakeup_reason);
     break;
   default:
     Serial.println("Unable to identify wake up cause");
@@ -277,20 +279,7 @@ void HandleButtons()
         // 3: Tryk registreret (LOW → HIGH)
         if (buttonStableState[i] == HIGH)
         {
-          digitalWrite(leds[i], HIGH);
-          ledTimer[i] = now;
-
-          struct tm timeinfo;
-          if (getLocalTime(&timeinfo))
-          {
-            RememberButtonPress(i, timeinfo);
-          }
-          else
-          {
-            Serial.println("Kunne ikke hente lokal tid");
-          }
-
-          lastAction = now; // reset inactivity timer
+          OnButtonClick(i);   // 🔹 LIGESOM ONEBUTTON-CALLBACK
         }
       }
     }
@@ -308,4 +297,33 @@ void HandleButtons()
     Serial.println("Entering sleep");
     esp_deep_sleep_start();
   }
+}
+
+
+// KALDES HVER GANG EN KNAP ER REGISTRERET SOM TRYKKET
+void OnButtonClick(int index)
+{
+  unsigned long now = millis();
+
+  // Tænd LED for den pågældende knap
+  digitalWrite(leds[index], HIGH);
+  ledTimer[index] = now;
+
+  // Hent tid og gem knaptryk (navn osv.)
+  struct tm timeinfo;
+  if (getLocalTime(&timeinfo))
+  {
+    RememberButtonPress(index, timeinfo);
+  }
+  else
+  {
+    Serial.println("Kunne ikke hente lokal tid");
+  }
+
+  // Reset inaktivitets-timer
+  lastAction = now;
+
+  // Debug
+  Serial.print("OnButtonClick: ");
+  Serial.println(buttonNames[index]);
 }
