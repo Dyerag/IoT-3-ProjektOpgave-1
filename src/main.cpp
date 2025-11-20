@@ -26,12 +26,17 @@ const int angryLed = 25;
 
 // Deepsleep time
 unsigned long lastAction = 0;
-// unsigned long sleepTime = 30000; // 30 seconds
-unsigned long sleepTime = 100;
+unsigned long sleepTime = 30000; // 30 seconds
+//unsigned long sleepTime = 100;
 
 //  WIFI
 const char *WIFI_SSID = "TEC-IOT";
 const char *WIFI_PASS = "42090793";
+
+// mqtt
+const char* MQTT_SERVER = "test.mosquitto.org";       
+const uint16_t MQTT_PORT = 1883;
+const char* MQTT_TOPIC = "tec/iot/buttons"; 
 
 // Knap/LED-arrays
 int buttons[] = {happyButton, satisfiedButton, unsatisfiedButton, angryButton};
@@ -92,6 +97,65 @@ void RememberButtonPress(int index, const struct tm &timeinfo)
   Serial.println(lastPressedTimestamp);
 }
 
+void HandleButtons()
+{
+    unsigned long now = millis();
+
+    for (int i = 0; i < count; i++)
+    {
+        bool reading = digitalRead(buttons[i]);
+
+        // 1: Rå læsning ændret → start debounce-timer
+        if (reading != buttonLastReading[i])
+        {
+            lastDebounceTime[i] = now;
+            buttonLastReading[i] = reading;
+        }
+
+        // 2: Stabil i DEBOUNCE_MS → opdater stabil tilstand
+        if ((now - lastDebounceTime[i]) >= DEBOUNCE_MS)
+        {
+            if (reading != buttonStableState[i])
+            {
+                buttonStableState[i] = reading;
+
+                // 3: Tryk registreret (LOW → HIGH)
+                if (buttonStableState[i] == HIGH)
+                {
+                    digitalWrite(leds[i], HIGH);
+                    ledTimer[i] = now;
+
+                    struct tm timeinfo;
+                    if (getLocalTime(&timeinfo))
+                    {
+                        RememberButtonPress(i, timeinfo);
+                    }
+                    else
+                    {
+                        Serial.println("Kunne ikke hente lokal tid");
+                    }
+
+                    lastAction = now; // reset inactivity timer
+                }
+            }
+        }
+
+        // 4: Sluk LED efter timeout
+        if (digitalRead(leds[i]) == HIGH && (now - ledTimer[i] >= LED_ON_TIME))
+        {
+            digitalWrite(leds[i], LOW);
+        }
+    }
+
+    // Deepsleep hvis inaktiv
+    if (now - lastAction >= sleepTime)
+    {
+        Serial.println("Entering sleep");
+        esp_deep_sleep_start();
+    }
+}
+
+
 void setup()
 {
   // put your setup code here, to run once:
@@ -142,65 +206,7 @@ void setup()
 
 void loop()
 {
-  unsigned long now = millis();
-
-  for (int i = 0; i < count; i++)
-  {
-    bool reading = digitalRead(buttons[i]);
-
-    // 1) Rå læsning ændret -> start debounce-timer
-    if (reading != buttonLastReading[i])
-    {
-      lastDebounceTime[i] = now;
-      buttonLastReading[i] = reading;
-    }
-
-    // 2) Hvis uændret i DEBOUNCE_MS -> opdatér stabil tilstand
-    if ((now - lastDebounceTime[i]) >= DEBOUNCE_MS)
-    {
-      // er der en reel ændring i stabil tilstand
-      if (reading != buttonStableState[i])
-      {
-        // stabil tilstand skifter
-        buttonStableState[i] = reading;
-
-        // 3) Registrér et "tryk" ved LOW -> HIGH
-        if (buttonStableState[i] == HIGH)
-        {
-          // Tænd LED og start timer
-          digitalWrite(leds[i], HIGH);
-          ledTimer[i] = now;
-
-          // Hent tid og gem knaptryk
-          struct tm timeinfo;
-          if (getLocalTime(&timeinfo))
-          {
-            RememberButtonPress(i, timeinfo);
-          }
-          else
-          {
-            Serial.println("Kunne ikke hente lokal tid");
-          }
-
-          // reset inactivity timer on button press
-          lastAction = now;
-        }
-      }
-    }
-
-    // 4) Sluk LED efter LED_ON_TIME ms
-    if (digitalRead(leds[i]) == HIGH && (now - ledTimer[i] >= LED_ON_TIME))
-    {
-      digitalWrite(leds[i], LOW);
-    }
-
-    // Start deep sleep if inactivity exceeds sleepTime
-    if (now - lastAction >= sleepTime)
-    {
-      Serial.println("Entering sleep");
-      esp_deep_sleep_start();
-    }
-  }
+  HandleButtons();
 }
 
 // put function definitions here:
@@ -310,3 +316,4 @@ void WakeUpButtonTrigger()
     break;
   }
 }
+
