@@ -26,17 +26,20 @@ const int angryLed = 25;
 
 // Deepsleep time
 unsigned long lastAction = 0;
-unsigned long sleepTime = 30000; // 30 seconds
-//unsigned long sleepTime = 100;
+// unsigned long sleepTime = 30000; // 30 seconds
+unsigned long sleepTime = 100;
 
 //  WIFI
 const char *WIFI_SSID = "TEC-IOT";
 const char *WIFI_PASS = "42090793";
+WiFiClient espClient;
 
-// mqtt
-const char *MQTT_SERVER = "test.mosquitto.org";
+// MQTT
+const char *MQTT_SERVER = "wilson.local";
 const uint16_t MQTT_PORT = 1883;
 const char *MQTT_TOPIC = "tec/iot/buttons";
+
+PubSubClient client(espClient);
 
 // Knap/LED-arrays
 int buttons[] = {happyButton, satisfiedButton, unsatisfiedButton, angryButton};
@@ -74,7 +77,6 @@ void RememberButtonPress(int index, const struct tm &timeinfo);
 void HandleButtons();
 void OnButtonClick(int index);
 
-
 void setup()
 {
   // put your setup code here, to run once:
@@ -84,6 +86,8 @@ void setup()
   // wifi og tid
   ConnectWiFi();
   InitTime();
+
+  client.setServer(MQTT_SERVER, MQTT_PORT);
 
   // pinMode setup for the buttons and corresponding leds
   pinMode(happyButton, INPUT);
@@ -125,7 +129,17 @@ void setup()
 
 void loop()
 {
+  if (!client.connected())
+    ConnectWiFi();
+  client.loop();
+
   HandleButtons();
+  // Deepsleep hvis inaktiv
+  if (millis() - lastAction >= sleepTime)
+  {
+    Serial.println("Entering sleep");
+    esp_deep_sleep_start();
+  }
 }
 
 // put function definitions here:
@@ -211,16 +225,16 @@ void PrintCurrentTimeForButton(int index)
 
 void WakeUpButtonTrigger()
 {
-  int wakeup_reason = log(esp_sleep_get_ext1_wakeup_status()) / log(2);
-  Serial.println("Woke up from sleep by " + String(wakeup_reason));
+  int wakeUpReason = log(esp_sleep_get_ext1_wakeup_status()) / log(2);
+  Serial.println("Woke up from sleep by " + String(wakeUpReason));
 
-  switch (wakeup_reason)
+  switch (wakeUpReason)
   {
   case GPIO_NUM_4:
   case GPIO_NUM_33:
   case GPIO_NUM_35:
   case GPIO_NUM_34:
-    //HandleButtons(wakeup_reason);
+    OnButtonClick(wakeUpReason);
     break;
   default:
     Serial.println("Unable to identify wake up cause");
@@ -231,7 +245,6 @@ void WakeUpButtonTrigger()
 // GEM HUSK OM KNAPTRYK
 void RememberButtonPress(int index, const struct tm &timeinfo)
 {
-  lastPressedIndex = index;
   lastPressedName = buttonNames[index];
 
   char buf[32];
@@ -279,7 +292,7 @@ void HandleButtons()
         // 3: Tryk registreret (LOW → HIGH)
         if (buttonStableState[i] == HIGH)
         {
-          OnButtonClick(i);   // 🔹 LIGESOM ONEBUTTON-CALLBACK
+          OnButtonClick(i); // 🔹 LIGESOM ONEBUTTON-CALLBACK
         }
       }
     }
@@ -290,15 +303,7 @@ void HandleButtons()
       digitalWrite(leds[i], LOW);
     }
   }
-
-  // Deepsleep hvis inaktiv
-  if (now - lastAction >= sleepTime)
-  {
-    Serial.println("Entering sleep");
-    esp_deep_sleep_start();
-  }
 }
-
 
 // KALDES HVER GANG EN KNAP ER REGISTRERET SOM TRYKKET
 void OnButtonClick(int index)
@@ -326,4 +331,25 @@ void OnButtonClick(int index)
   // Debug
   Serial.print("OnButtonClick: ");
   Serial.println(buttonNames[index]);
+}
+
+void reconnect()
+{
+  while (!client.connected())
+  {
+    Serial.print("Connecting to MQTT...");
+
+    String clientId = "ESP32-" + String(random(0xffff), HEX);
+
+    if (client.connect(clientId.c_str()))
+    {
+      Serial.println("connected");
+    }
+    else
+    {
+      Serial.print("failed, rc=");
+      Serial.println(client.state());
+      delay(5000);
+    }
+  }
 }
