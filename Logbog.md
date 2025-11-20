@@ -1,7 +1,3 @@
-# Logbog
-
-## d. 18-11
-
 # Logbog – Azad
 
 ## 20. november 2025
