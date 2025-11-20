@@ -4,14 +4,14 @@
 #include <time.h>
 
 // Wakeup buttons
-#define WAKEUP_GPIO_1 GPIO_NUM_4                                                                                                 // Only RTC IO are allowed - ESP32 Pin example
-#define WAKEUP_GPIO_2 GPIO_NUM_33                                                                                                // Only RTC IO are allowed - ESP32 Pin example
-#define WAKEUP_GPIO_3 GPIO_NUM_35                                                                                                // Only RTC IO are allowed - ESP32 Pin example
-#define WAKEUP_GPIO_4 GPIO_NUM_34                                                                                                // Only RTC IO are allowed - ESP32 Pin example
+#define WAKEUP_GPIO_1 GPIO_NUM_4  // Only RTC IO are allowed - ESP32 Pin example
+#define WAKEUP_GPIO_2 GPIO_NUM_33 // Only RTC IO are allowed - ESP32 Pin example
+#define WAKEUP_GPIO_3 GPIO_NUM_35 // Only RTC IO are allowed - ESP32 Pin example
+#define WAKEUP_GPIO_4 GPIO_NUM_34 // Only RTC IO are allowed - ESP32 Pin example
 // Adds all the buttons to the bitmask, so they can be used to wake up the ESP32
 #define BUTTON_PIN_BITMASK (1ULL << WAKEUP_GPIO_1) | (1ULL << WAKEUP_GPIO_2) | (1ULL << WAKEUP_GPIO_3) | (1ULL << WAKEUP_GPIO_4) // 2 ^ GPIO_NUMBER in hex
 // Sets the wakeup method to 0, which means use EXT1 for wakeup. 1 supports one or more pins
-#define USE_EXT0_WAKEUP 0                                                                                                        // 1 = EXT0 wakeup, 0 = EXT1 wakeup
+#define USE_EXT0_WAKEUP 0 // 1 = EXT0 wakeup, 0 = EXT1 wakeup
 
 // Button and LED pins
 const int happyButton = 4;
@@ -58,7 +58,7 @@ const unsigned long LED_ON_TIME = 1000; // sekunder
 void ConnectWiFi();
 bool InitTime();
 void PrintCurrentTimeForButton(int index);
-void WakeupCause();
+void WakeUpButtonTrigger();
 
 void setup()
 {
@@ -104,7 +104,8 @@ void setup()
   rtc_gpio_pullup_dis(WAKEUP_GPIO_3);
   rtc_gpio_pullup_dis(WAKEUP_GPIO_4);
 
-  WakeupCause();
+  if (esp_sleep_get_wakeup_cause())
+    WakeUpButtonTrigger();
 }
 
 void loop()
@@ -177,7 +178,7 @@ bool InitTime()
   struct tm timeinfo;
   unsigned long start = millis();
 
-  while (millis() - start < 10000) 
+  while (millis() - start < 10000)
   {
     if (getLocalTime(&timeinfo))
     {
@@ -186,7 +187,7 @@ bool InitTime()
     }
 
     Serial.println("Venter på NTP...");
-    vTaskDelay(100);   
+    vTaskDelay(100);
   }
 
   Serial.println("Kunne ikke hente tid fra NTP");
@@ -206,10 +207,10 @@ void ConnectWiFi()
 
   unsigned long start = millis();
 
-  while (!WiFi.isConnected() && (millis() - start < 20000))  // 20 sek timeout
+  while (!WiFi.isConnected() && (millis() - start < 20000)) // 20 sek timeout
   {
     Serial.print(".");
-    vTaskDelay(1);   
+    vTaskDelay(1);
   }
 
   Serial.println();
@@ -242,30 +243,28 @@ void PrintCurrentTimeForButton(int index)
     Serial.println("Kunne ikke hente lokal tid");
   }
 }
- void WakeupCause(){
-  // wakeup_reason = esp_sleep_get_wakeup_cause();
 
-  // switch (wakeup_reason)
-  // {
-  // case ESP_SLEEP_WAKEUP_EXT0:
-  //   Serial.println("Wakeup caused by external signal using RTC_IO");
-  //   break;
-  // case ESP_SLEEP_WAKEUP_EXT1:
-  //   Serial.println("Wakeup caused by external signal using RTC_CNTL");
-  //   break;
-  // case ESP_SLEEP_WAKEUP_TIMER:
-  //   Serial.println("Wakeup caused by timer");
-  //   break;
-  // case ESP_SLEEP_WAKEUP_TOUCHPAD:
-  //   Serial.println("Wakeup caused by touchpad");
-  //   break;
-  // case ESP_SLEEP_WAKEUP_ULP:
-  //   Serial.println("Wakeup caused by ULP program");
-  //   break;
-  // default:
-  //   Serial.printf("Wakeup was not caused by deep sleep: %d\n", wakeup_reason);
-  //   break;
-  // }
+void WakeUpButtonTrigger()
+{
+  int wakeup_reason = log(esp_sleep_get_ext1_wakeup_status()) / log(2);
+  Serial.println("Woke up from sleep by " + String(wakeup_reason));
 
-  Serial.println("Woke up from sleep by " + String(esp_sleep_get_wakeup_cause()));
- }
+  switch (wakeup_reason)
+  {
+  case GPIO_NUM_4:
+
+    break;
+  case GPIO_NUM_33:
+  
+    break;
+  case GPIO_NUM_35:
+
+    break;
+  case GPIO_NUM_34:
+
+    break;
+  default:
+  
+    break;
+  }
+}
