@@ -8,7 +8,9 @@
 #define WAKEUP_GPIO_2 GPIO_NUM_33                                                                                                // Only RTC IO are allowed - ESP32 Pin example
 #define WAKEUP_GPIO_3 GPIO_NUM_35                                                                                                // Only RTC IO are allowed - ESP32 Pin example
 #define WAKEUP_GPIO_4 GPIO_NUM_34                                                                                                // Only RTC IO are allowed - ESP32 Pin example
+// Adds all the buttons to the bitmask, so they can be used to wake up the ESP32
 #define BUTTON_PIN_BITMASK (1ULL << WAKEUP_GPIO_1) | (1ULL << WAKEUP_GPIO_2) | (1ULL << WAKEUP_GPIO_3) | (1ULL << WAKEUP_GPIO_4) // 2 ^ GPIO_NUMBER in hex
+// Sets the wakeup method to 0, which means use EXT1 for wakeup. 1 supports one or more pins
 #define USE_EXT0_WAKEUP 0                                                                                                        // 1 = EXT0 wakeup, 0 = EXT1 wakeup
 
 // Button and LED pins
@@ -23,7 +25,8 @@ const int angryLed = 25;
 
 // Deepsleep time
 unsigned long lastAction = 0;
-unsigned long sleepTime = 30000; // 30 seconds
+// unsigned long sleepTime = 30000; // 30 seconds
+unsigned long sleepTime = 100;
 
 //  WIFI
 const char *WIFI_SSID = "IoT_H3/4";
@@ -55,6 +58,7 @@ const unsigned long LED_ON_TIME = 1000; // sekunder
 void ConnectWiFi();
 bool InitTime();
 void PrintCurrentTimeForButton(int index);
+void WakeupCause();
 
 void setup()
 {
@@ -66,6 +70,7 @@ void setup()
   ConnectWiFi();
   InitTime();
 
+  // pinMode setup for the buttons and corresponding leds
   pinMode(happyButton, INPUT);
   pinMode(happyLed, OUTPUT);
   pinMode(satisfiedButton, INPUT);
@@ -90,7 +95,6 @@ void setup()
   }
 
   esp_sleep_enable_ext1_wakeup(BUTTON_PIN_BITMASK, ESP_EXT1_WAKEUP_ANY_HIGH);
-
   rtc_gpio_pulldown_en(WAKEUP_GPIO_1);
   rtc_gpio_pulldown_en(WAKEUP_GPIO_2);
   rtc_gpio_pulldown_en(WAKEUP_GPIO_3);
@@ -99,6 +103,8 @@ void setup()
   rtc_gpio_pullup_dis(WAKEUP_GPIO_2);
   rtc_gpio_pullup_dis(WAKEUP_GPIO_3);
   rtc_gpio_pullup_dis(WAKEUP_GPIO_4);
+
+  WakeupCause();
 }
 
 void loop()
@@ -232,3 +238,30 @@ void PrintCurrentTimeForButton(int index)
     Serial.println("Kunne ikke hente lokal tid");
   }
 }
+ void WakeupCause(){
+  // wakeup_reason = esp_sleep_get_wakeup_cause();
+
+  // switch (wakeup_reason)
+  // {
+  // case ESP_SLEEP_WAKEUP_EXT0:
+  //   Serial.println("Wakeup caused by external signal using RTC_IO");
+  //   break;
+  // case ESP_SLEEP_WAKEUP_EXT1:
+  //   Serial.println("Wakeup caused by external signal using RTC_CNTL");
+  //   break;
+  // case ESP_SLEEP_WAKEUP_TIMER:
+  //   Serial.println("Wakeup caused by timer");
+  //   break;
+  // case ESP_SLEEP_WAKEUP_TOUCHPAD:
+  //   Serial.println("Wakeup caused by touchpad");
+  //   break;
+  // case ESP_SLEEP_WAKEUP_ULP:
+  //   Serial.println("Wakeup caused by ULP program");
+  //   break;
+  // default:
+  //   Serial.printf("Wakeup was not caused by deep sleep: %d\n", wakeup_reason);
+  //   break;
+  // }
+
+  Serial.println("Woke up from sleep by " + String(esp_sleep_get_wakeup_cause()));
+ }
