@@ -29,8 +29,8 @@ unsigned long lastAction = 0;
 unsigned long sleepTime = 100;
 
 //  WIFI
-const char *WIFI_SSID = "IoT_H3/4";
-const char *WIFI_PASS = "98806829";
+const char *WIFI_SSID = "TEC-IOT";
+const char *WIFI_PASS = "42090793";
 
 // Knap/LED-arrays
 int buttons[] = {happyButton, satisfiedButton, unsatisfiedButton, angryButton};
@@ -175,15 +175,18 @@ bool InitTime()
   configTime(3600, 0, "pool.ntp.org", "time.nist.gov");
 
   struct tm timeinfo;
-  for (int i = 0; i < 20; i++)
+  unsigned long start = millis();
+
+  while (millis() - start < 10000) 
   {
     if (getLocalTime(&timeinfo))
     {
       Serial.println("Tid hentet fra NTP");
       return true;
     }
+
     Serial.println("Venter på NTP...");
-    delay(500);
+    vTaskDelay(100);   
   }
 
   Serial.println("Kunne ikke hente tid fra NTP");
@@ -201,13 +204,14 @@ void ConnectWiFi()
 
   Serial.print("Forbinder til WiFi");
 
-  int tries = 0;
-  while (!WiFi.isConnected() && tries < 40)
-  { // ca. 20 sek
+  unsigned long start = millis();
+
+  while (!WiFi.isConnected() && (millis() - start < 20000))  // 20 sek timeout
+  {
     Serial.print(".");
-    delay(500);
-    tries++;
+    vTaskDelay(1);   
   }
+
   Serial.println();
 
   if (WiFi.isConnected())
