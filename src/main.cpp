@@ -26,17 +26,17 @@ const int angryLed = 25;
 
 // Deepsleep time
 unsigned long lastAction = 0;
-unsigned long sleepTime = 30000; // 30 seconds
-//unsigned long sleepTime = 100;
+// unsigned long sleepTime = 30000; // 30 seconds
+unsigned long sleepTime = 100;
 
 //  WIFI
 const char *WIFI_SSID = "TEC-IOT";
 const char *WIFI_PASS = "42090793";
 
 // mqtt
-const char* MQTT_SERVER = "test.mosquitto.org";       
+const char *MQTT_SERVER = "test.mosquitto.org";
 const uint16_t MQTT_PORT = 1883;
-const char* MQTT_TOPIC = "tec/iot/buttons"; 
+const char *MQTT_TOPIC = "tec/iot/buttons";
 
 // Knap/LED-arrays
 int buttons[] = {happyButton, satisfiedButton, unsatisfiedButton, angryButton};
@@ -70,91 +70,8 @@ void ConnectWiFi();
 bool InitTime();
 void PrintCurrentTimeForButton(int index);
 void WakeUpButtonTrigger();
-
-// GEM HUSK OM KNAPTRYK
-void RememberButtonPress(int index, const struct tm &timeinfo)
-{
-  lastPressedIndex = index;
-  lastPressedName = buttonNames[index];
-
-  char buf[32];
-  snprintf(
-      buf,
-      sizeof(buf),
-      "%04d-%02d-%02d %02d:%02d:%02d",
-      timeinfo.tm_year + 1900,
-      timeinfo.tm_mon + 1,
-      timeinfo.tm_mday,
-      timeinfo.tm_hour,
-      timeinfo.tm_min,
-      timeinfo.tm_sec);
-
-  lastPressedTimestamp = String(buf);
-
-  Serial.print("gemt: ");
-  Serial.print(lastPressedName);
-  Serial.print("  tid: ");
-  Serial.println(lastPressedTimestamp);
-}
-
-void HandleButtons()
-{
-    unsigned long now = millis();
-
-    for (int i = 0; i < count; i++)
-    {
-        bool reading = digitalRead(buttons[i]);
-
-        // 1: Rå læsning ændret → start debounce-timer
-        if (reading != buttonLastReading[i])
-        {
-            lastDebounceTime[i] = now;
-            buttonLastReading[i] = reading;
-        }
-
-        // 2: Stabil i DEBOUNCE_MS → opdater stabil tilstand
-        if ((now - lastDebounceTime[i]) >= DEBOUNCE_MS)
-        {
-            if (reading != buttonStableState[i])
-            {
-                buttonStableState[i] = reading;
-
-                // 3: Tryk registreret (LOW → HIGH)
-                if (buttonStableState[i] == HIGH)
-                {
-                    digitalWrite(leds[i], HIGH);
-                    ledTimer[i] = now;
-
-                    struct tm timeinfo;
-                    if (getLocalTime(&timeinfo))
-                    {
-                        RememberButtonPress(i, timeinfo);
-                    }
-                    else
-                    {
-                        Serial.println("Kunne ikke hente lokal tid");
-                    }
-
-                    lastAction = now; // reset inactivity timer
-                }
-            }
-        }
-
-        // 4: Sluk LED efter timeout
-        if (digitalRead(leds[i]) == HIGH && (now - ledTimer[i] >= LED_ON_TIME))
-        {
-            digitalWrite(leds[i], LOW);
-        }
-    }
-
-    // Deepsleep hvis inaktiv
-    if (now - lastAction >= sleepTime)
-    {
-        Serial.println("Entering sleep");
-        esp_deep_sleep_start();
-    }
-}
-
+void RememberButtonPress(int index, const struct tm &timeinfo);
+void HandleButtons();
 
 void setup()
 {
@@ -295,25 +212,100 @@ void WakeUpButtonTrigger()
   int wakeup_reason = log(esp_sleep_get_ext1_wakeup_status()) / log(2);
   Serial.println("Woke up from sleep by " + String(wakeup_reason));
 
-  Serial.println("Woke up from sleep by " + String(esp_sleep_get_wakeup_cause()));
-
   switch (wakeup_reason)
   {
   case GPIO_NUM_4:
-
-    break;
   case GPIO_NUM_33:
-
-    break;
   case GPIO_NUM_35:
-
-    break;
   case GPIO_NUM_34:
-
+    HandleButtons(wakeup_reason);
     break;
   default:
-
+    Serial.println("Unable to identify wake up cause");
     break;
   }
 }
 
+// GEM HUSK OM KNAPTRYK
+void RememberButtonPress(int index, const struct tm &timeinfo)
+{
+  lastPressedIndex = index;
+  lastPressedName = buttonNames[index];
+
+  char buf[32];
+  snprintf(
+      buf,
+      sizeof(buf),
+      "%04d-%02d-%02d %02d:%02d:%02d",
+      timeinfo.tm_year + 1900,
+      timeinfo.tm_mon + 1,
+      timeinfo.tm_mday,
+      timeinfo.tm_hour,
+      timeinfo.tm_min,
+      timeinfo.tm_sec);
+
+  lastPressedTimestamp = String(buf);
+
+  Serial.print("gemt: ");
+  Serial.print(lastPressedName);
+  Serial.print("  tid: ");
+  Serial.println(lastPressedTimestamp);
+}
+
+void HandleButtons()
+{
+  unsigned long now = millis();
+
+  for (int i = 0; i < count; i++)
+  {
+    bool reading = digitalRead(buttons[i]);
+
+    // 1: Rå læsning ændret → start debounce-timer
+    if (reading != buttonLastReading[i])
+    {
+      lastDebounceTime[i] = now;
+      buttonLastReading[i] = reading;
+    }
+
+    // 2: Stabil i DEBOUNCE_MS → opdater stabil tilstand
+    if ((now - lastDebounceTime[i]) >= DEBOUNCE_MS)
+    {
+      if (reading != buttonStableState[i])
+      {
+        buttonStableState[i] = reading;
+
+        // 3: Tryk registreret (LOW → HIGH)
+        if (buttonStableState[i] == HIGH)
+        {
+          digitalWrite(leds[i], HIGH);
+          ledTimer[i] = now;
+
+          struct tm timeinfo;
+          if (getLocalTime(&timeinfo))
+          {
+            RememberButtonPress(i, timeinfo);
+          }
+          else
+          {
+            Serial.println("Kunne ikke hente lokal tid");
+          }
+
+          lastAction = now; // reset inactivity timer
+        }
+      }
+    }
+
+    // 4: Sluk LED efter timeout
+    if (digitalRead(leds[i]) == HIGH && (now - ledTimer[i] >= LED_ON_TIME))
+    {
+      digitalWrite(leds[i], LOW);
+    }
+  }
+
+  // Deepsleep hvis inaktiv
+  if (now - lastAction >= sleepTime)
+  {
+    Serial.println("Entering sleep");
+    esp_deep_sleep_start();
+  }
+}
