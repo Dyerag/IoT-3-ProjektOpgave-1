@@ -26,8 +26,8 @@ const int angryLed = 25;
 
 // Deepsleep time
 unsigned long lastAction = 0;
-// unsigned long sleepTime = 30000; // 30 seconds
-unsigned long sleepTime = 100;
+unsigned long sleepTime = 30000; // 30 seconds
+// unsigned long sleepTime = 5000;
 
 //  WIFI
 const char *WIFI_SSID = "TEC-IOT";
@@ -37,7 +37,7 @@ WiFiClient espClient;
 // MQTT
 const char *MQTT_SERVER = "wilson.local";
 const uint16_t MQTT_PORT = 1883;
-const char *MQTT_TOPIC = "tec/iot/buttons";
+const char *MQTT_TOPIC = "dylan_azad/iot/feedback";
 
 PubSubClient client(espClient);
 
@@ -69,11 +69,11 @@ String lastPressedName = "";
 String lastPressedTimestamp = "";
 
 // put function declarations here:
-void ConnectWiFi();
+void ConnectWiFiAndClient();
 bool InitTime();
 void PrintCurrentTimeForButton(int index);
 void WakeUpButtonTrigger();
-void RememberButtonPress(int index, const struct tm &timeinfo);
+String RememberButtonPress(int index, const struct tm &timeinfo);
 void HandleButtons();
 void OnButtonClick(int index);
 
@@ -84,10 +84,10 @@ void setup()
   delay(1000);
 
   // wifi og tid
-  ConnectWiFi();
-  InitTime();
-
   client.setServer(MQTT_SERVER, MQTT_PORT);
+
+  ConnectWiFiAndClient();
+  InitTime();
 
   // pinMode setup for the buttons and corresponding leds
   pinMode(happyButton, INPUT);
@@ -130,7 +130,7 @@ void setup()
 void loop()
 {
   if (!client.connected())
-    ConnectWiFi();
+    ConnectWiFiAndClient();
   client.loop();
 
   HandleButtons();
@@ -174,9 +174,9 @@ bool InitTime()
 }
 
 // FORBIND TIL WIFI
-void ConnectWiFi()
+void ConnectWiFiAndClient()
 {
-  if (WiFi.isConnected())
+  if (WiFi.isConnected() && client.connected())
     return;
 
   WiFi.mode(WIFI_STA);
@@ -198,6 +198,25 @@ void ConnectWiFi()
     Serial.println("WiFi: FORBUNDET");
   else
     Serial.println("WiFi: FORBUNDELSE FEJLEDE");
+
+  unsigned long mqttStart = millis();
+  while (!client.connected() && millis() - mqttStart < 10000)
+  {
+    Serial.print("Connecting to MQTT...");
+
+    String clientId = "ESP32-" + String(random(0xffff), HEX);
+
+    if (client.connect(clientId.c_str()))
+    {
+      Serial.println("connected");
+    }
+    else
+    {
+      Serial.print("failed, rc=");
+      Serial.println(client.state());
+      delay(5000);
+    }
+  }
 }
 
 // HENT TID VIA NTP
@@ -234,7 +253,9 @@ void WakeUpButtonTrigger()
   case GPIO_NUM_33:
   case GPIO_NUM_35:
   case GPIO_NUM_34:
-    OnButtonClick(wakeUpReason);
+    for (int i = 0; i < count; i++)
+      if (buttons[i] == wakeUpReason)
+        OnButtonClick(i);
     break;
   default:
     Serial.println("Unable to identify wake up cause");
@@ -243,7 +264,7 @@ void WakeUpButtonTrigger()
 }
 
 // GEM HUSK OM KNAPTRYK
-void RememberButtonPress(int index, const struct tm &timeinfo)
+String RememberButtonPress(int index, const struct tm &timeinfo)
 {
   lastPressedName = buttonNames[index];
 
@@ -261,10 +282,7 @@ void RememberButtonPress(int index, const struct tm &timeinfo)
 
   lastPressedTimestamp = String(buf);
 
-  Serial.print("gemt: ");
-  Serial.print(lastPressedName);
-  Serial.print("  tid: ");
-  Serial.println(lastPressedTimestamp);
+  return String(lastPressedTimestamp);
 }
 
 void HandleButtons()
@@ -316,40 +334,16 @@ void OnButtonClick(int index)
 
   // Hent tid og gem knaptryk (navn osv.)
   struct tm timeinfo;
-  if (getLocalTime(&timeinfo))
+
+  if (!getLocalTime(&timeinfo))
   {
-    RememberButtonPress(index, timeinfo);
-  }
-  else
-  {
-    Serial.println("Kunne ikke hente lokal tid");
+    Serial.println("Failed to get time!");
+    return;
   }
 
+  String payload = "\"DateTime\":\"" + RememberButtonPress(index, timeinfo) + "\", \"Rating\":\"" + String(buttonNames[index]) + "\"";
+
+  client.publish(MQTT_TOPIC, payload.c_str());
   // Reset inaktivitets-timer
   lastAction = now;
-
-  // Debug
-  Serial.print("OnButtonClick: ");
-  Serial.println(buttonNames[index]);
-}
-
-void reconnect()
-{
-  while (!client.connected())
-  {
-    Serial.print("Connecting to MQTT...");
-
-    String clientId = "ESP32-" + String(random(0xffff), HEX);
-
-    if (client.connect(clientId.c_str()))
-    {
-      Serial.println("connected");
-    }
-    else
-    {
-      Serial.print("failed, rc=");
-      Serial.println(client.state());
-      delay(5000);
-    }
-  }
 }
